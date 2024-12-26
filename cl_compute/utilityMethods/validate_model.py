@@ -1,6 +1,8 @@
 from .validation_queries import *
 from ..sql_connector import insert_log
 from .populate_periods import main as populate_periods
+from .backup_and_restore import backup_tables, restore_tables
+from .populate_defaults import update_defaults
 
 def main(conn):
     insert_log(conn, f"{'-'* 5} Model Validation Started {'-'* 5}")
@@ -16,6 +18,10 @@ def main(conn):
     detect_bom_loop(conn)
     string_length_validation(conn)
     max_decimal_validation(conn)
+    backup_tables(conn)
+    update_defaults(conn)
+    cost_validation(conn)
+    restore_tables(conn)
     insert_log(conn, f"{'-'* 5} Model Validation Completed {'-'* 5}")
 
 def validate_primary_keys(conn):
@@ -418,3 +424,70 @@ def max_decimal_validation(conn, round_decimals = 5):
             conn.execute(insert_query + select_query)
 
     insert_log(conn, "Decimals validated")
+
+
+def cost_validation(conn):
+    ''' Check if downstream cost is not lower than upstream cost, check are done on:
+        1. Transportation policy check
+        2. Bill of Materials check
+        '''
+    select_query = """SELECT DISTINCT 'I_InventoryPolicy',
+                '(InputProduct, OutputProduct, InputCost, OutputCost)',
+                '('||db.ItemId||','||t1.ItemId||','||round(rmi.InventoryUnitCost * db.UsageQuantity,2)||','||round(fgi.InventoryUnitCost,2)||')',
+                'Warning',
+                'Upstream cost is lower than downstream in BOM'
+                FROM I_Processes t1,
+                     I_InventoryPolicy rmi,
+                     I_InventoryPolicy fgi,
+                     I_BOMRecipe db
+                WHERE t1.BOMId = db.BOMId
+                AND   t1.LocationId = db.LocationId
+                AND   rmi.ItemId = db.ItemId
+                AND   rmi.LocationId = db.LocationId
+                AND   fgi.ItemId = t1.ItemId
+                AND   fgi.LocationId = t1.LocationId
+                AND   ifnull(fgi.InventoryUnitCost,0) < ifnull(rmi.InventoryUnitCost,0) * db.UsageQuantity"""
+    conn.intermediate_commit()
+    conn.execute(insert_query + select_query)
+
+    select_query = """SELECT DISTINCT 'I_InventoryPolicy',
+                                '(OutputProduct, InputCost, OutputCost)',
+                                '('||output_item||','||round(min_cost,2)||','||round(di.InventoryUnitCost,2)||')',
+                                'Warning',
+                                'Upstream cost is lower than downstream in BOM aggregated'
+                FROM
+                (
+                SELECT output_item, LocationId, sum(ifnull(InventoryUnitCost,0) * UsageQuantity) as min_cost
+                FROM
+                (
+                    select DISTINCT db.ItemId as input_item, db.LocationId,  dop.ItemId as output_item, db.UsageQuantity, di.InventoryUnitCost
+                    from I_BOMRecipe db,
+                        I_Processes dop,
+                        I_InventoryPolicy di
+                    WHERE db.BOMId = dop.BOMId
+                    AND   db.LocationId = dop.LocationId
+                    AND   db.ItemId = di.ItemId
+                    and   db.LocationId = di.LocationId
+                )
+                GROUP BY output_item, LocationId
+                ) t1,
+                I_InventoryPolicy di
+                WHERE t1.output_item = di.ItemId
+                AND   t1.LocationId = t1.LocationId
+                and   t1.min_cost > di.InventoryUnitCost"""
+    conn.execute(insert_query + select_query)
+
+    tpt_cost_warning = """SELECT DISTINCT 'I_TransportationPolicy',
+                                        '(FromLocationCode, ToLocationCode, ItemCode, FromUnitCost, ToUnitCost)',
+                                        '('||dt.FromLocationId||','||dt.ToLocationId||','||dt.ItemId||','||src.InventoryUnitCost||','||dest.InventoryUnitCost||')',
+                                        'Warning',
+                                        'Upstream cost is lower than downstream in Distribution'
+                        FROM I_TransportationPolicy dt,
+                            I_InventoryPolicy src,
+                            I_InventoryPolicy dest
+                        WHERE dt.FromLocationId = src.LocationId
+                        and   dt.ItemId = src.ItemId
+                        and   dt.ToLocationId = dest.LocationId
+                        and   dt.ItemId = dest.ItemId
+                        and   src.InventoryUnitCost > dest.InventoryUnitCost"""
+    conn.execute(insert_query + tpt_cost_warning)
