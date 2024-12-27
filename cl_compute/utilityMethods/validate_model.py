@@ -21,6 +21,7 @@ def main(conn):
     backup_tables(conn)
     update_defaults(conn)
     cost_validation(conn)
+    split_ratio_validation(conn)
     restore_tables(conn)
     insert_log(conn, f"{'-'* 5} Model Validation Completed {'-'* 5}")
 
@@ -205,12 +206,8 @@ def verify_numeric_values(conn):
                                 WHERE CAST(ifnull([{col_name}],0) AS Real) > 1000000"""
             conn.execute(insert_query + select_query)
     for table_name in null_or_positive:
-        table_cols = list(primary_keys.get(table_name, []))
-        table_cols = list()
-        if 'ScenarioName' in table_cols:
-            table_cols.remove("ScenarioName")
         for col_name in null_or_positive[table_name]:
-            table_columns = list(table_cols)
+            table_columns = list()
             table_columns.append(col_name)
             select_query = f"""select   DISTINCT
                                         '{table_name}', 
@@ -224,12 +221,8 @@ def verify_numeric_values(conn):
 
 
     for table_name in non_negative_vals:
-        table_cols = list(primary_keys.get(table_name, []))
-        table_cols = list()
-        if 'ScenarioName' in table_cols:
-            table_cols.remove("ScenarioName")
         for col_name in non_negative_vals[table_name]:
-            table_columns = list(table_cols)
+            table_columns = list()
             table_columns.append(col_name)
             select_query = f"""select   DISTINCT
                                         '{table_name}', 
@@ -252,12 +245,8 @@ def verify_numeric_values(conn):
             conn.execute(insert_query + select_query)
     
     for table_name in max_1_values:
-        table_cols = list(primary_keys.get(table_name, []))
-        table_cols = list()
-        if 'ScenarioName' in table_cols:
-            table_cols.remove("ScenarioName")
         for col_name in max_1_values[table_name]:
-            table_columns = list(table_cols)
+            table_columns = list()
             table_columns.append(col_name)
             select_query = f"""select   DISTINCT
                                         '{table_name}', 
@@ -270,12 +259,8 @@ def verify_numeric_values(conn):
             conn.execute(insert_query + select_query)
 
     for table_name in boolean_values:
-        table_cols = list(primary_keys.get(table_name, []))
-        table_cols = list()
-        if 'ScenarioName' in table_cols:
-            table_cols.remove("ScenarioName")
         for col_name in boolean_values[table_name]:
-            table_columns = list(table_cols)
+            table_columns = list()
             table_columns.append(col_name)
             select_query = f"""select   DISTINCT
                                         '{table_name}', 
@@ -347,7 +332,7 @@ def detect_bom_loop(conn):
                         (
                             select DISTINCT I_BOMRecipe.ItemId as from_item, I_Processes.ItemId as to_item
                             from I_Processes,
-                                I_BOMRecipe 
+                                 I_BOMRecipe 
                             WHERE I_Processes.BOMId = I_BOMRecipe.BOMId
                         )
                         SELECT t0.from_item, t0.to_item as to_item_0 """
@@ -433,20 +418,20 @@ def cost_validation(conn):
         '''
     select_query = """SELECT DISTINCT 'I_InventoryPolicy',
                 '(InputProduct, OutputProduct, InputCost, OutputCost)',
-                '('||db.ItemId||','||t1.ItemId||','||round(rmi.InventoryUnitCost * db.UsageQuantity,2)||','||round(fgi.InventoryUnitCost,2)||')',
+                '('||I_BOMRecipe.ItemId||','||I_Processes.ItemId||','||round(rmi.InventoryUnitCost * I_BOMRecipe.UsageQuantity,2)||','||round(fgi.InventoryUnitCost,2)||')',
                 'Warning',
                 'Upstream cost is lower than downstream in BOM'
-                FROM I_Processes t1,
+                FROM I_Processes ,
                      I_InventoryPolicy rmi,
                      I_InventoryPolicy fgi,
-                     I_BOMRecipe db
-                WHERE t1.BOMId = db.BOMId
-                AND   t1.LocationId = db.LocationId
-                AND   rmi.ItemId = db.ItemId
-                AND   rmi.LocationId = db.LocationId
-                AND   fgi.ItemId = t1.ItemId
-                AND   fgi.LocationId = t1.LocationId
-                AND   ifnull(fgi.InventoryUnitCost,0) < ifnull(rmi.InventoryUnitCost,0) * db.UsageQuantity"""
+                     I_BOMRecipe
+                WHERE I_Processes.BOMId = I_BOMRecipe.BOMId
+                AND   I_Processes.LocationId = I_BOMRecipe.LocationId
+                AND   rmi.ItemId = I_BOMRecipe.ItemId
+                AND   rmi.LocationId = I_BOMRecipe.LocationId
+                AND   fgi.ItemId = I_Processes.ItemId
+                AND   fgi.LocationId = I_Processes.LocationId
+                AND   ifnull(fgi.InventoryUnitCost,0) < ifnull(rmi.InventoryUnitCost,0) * I_BOMRecipe.UsageQuantity"""
     conn.intermediate_commit()
     conn.execute(insert_query + select_query)
 
@@ -478,7 +463,7 @@ def cost_validation(conn):
     conn.execute(insert_query + select_query)
 
     tpt_cost_warning = """SELECT DISTINCT 'I_TransportationPolicy',
-                                        '(FromLocationCode, ToLocationCode, ItemCode, FromUnitCost, ToUnitCost)',
+                                        '(FromLocationId, ToLocationId, ItemCode, FromUnitCost, ToUnitCost)',
                                         '('||dt.FromLocationId||','||dt.ToLocationId||','||dt.ItemId||','||src.InventoryUnitCost||','||dest.InventoryUnitCost||')',
                                         'Warning',
                                         'Upstream cost is lower than downstream in Distribution'
@@ -491,3 +476,191 @@ def cost_validation(conn):
                         and   dt.ItemId = dest.ItemId
                         and   src.InventoryUnitCost > dest.InventoryUnitCost"""
     conn.execute(insert_query + tpt_cost_warning)
+
+
+def split_ratio_validation(conn):
+    ''' Check sum of MinSplitRatio in I_TransportationPolicy table and I_Processes table 
+        should not be greater than 1 '''
+    select_errors = """SELECT 'I_Processes',
+                        '(ItemId, LocationId, ProcessId)', 
+                            '('||ItemId||','||LocationId||','||ProcessId||')',
+                            'Error',
+                            'Different split ratio across process steps'
+                        FROM I_Processes
+                        WHERE MinSplitRatio is NOT NULL
+                        GROUP BY ItemId,
+                                LocationId,
+                                ProcessId
+                        HAVING Min(ifnull(MinSplitRatio, 0)) != Max(ifnull(MinSplitRatio, 0))"""
+    conn.execute(insert_query + select_errors)
+
+
+    
+    op_split_error = """SELECT 'I_Processes',
+                                '(ItemId, LocationId)',
+                                '(' || ItemId || ',' || LocationId || ')',
+                                'Error',
+                                'Sum of MinSplitRatio should be less than 1'
+                            FROM (
+                                    SELECT ItemId,
+                                            LocationId,
+                                            ProcessId,
+                                            Max(MinSplitRatio) AS MinSplitRatio
+                                        FROM I_Processes
+                                        WHERE MinSplitRatio IS NOT NULL
+                                        GROUP BY ItemId,
+                                                LocationId,
+                                                ProcessId
+                                )
+                            GROUP BY ItemId,
+                                    LocationId
+                            HAVING ROUND(SUM(MinSplitRatio),9) > 1"""
+    
+    create_temp_table = """CREATE TABLE TEMP.OP_SPLIT_ERRORS AS
+                            SELECT DISTINCT ItemID, LocationId
+                            FROM (
+                                    SELECT ItemId,
+                                            LocationId,
+                                            ProcessId,
+                                            Max(MinSplitRatio) AS MinSplitRatio
+                                        FROM I_Processes
+                                        WHERE MinSplitRatio IS NOT NULL
+                                        GROUP BY ItemId,
+                                                LocationId,
+                                                ProcessId
+                                )
+                            GROUP BY ItemId,
+                                    LocationId
+                            HAVING ROUND(SUM(MinSplitRatio),9) > 1"""
+
+    conn.execute(insert_query + op_split_error)
+    conn.execute(create_temp_table)
+    
+    row_check = """select 1 from I_ProcessesPerPeriod
+                    where MinSplitRatio is not null"""
+    rows = conn.execute(row_check).fetchone()
+    if rows:
+        multi_period_query = """SELECT 'I_ProcessesPerPeriod',
+                                '(ItemId, LocationId, PeriodStart)', 
+                                '('||ItemId||','||LocationId||','||date(PeriodStart + julianday('1899-12-30'))||')',
+                                'Error',
+                                'Sum of MinSplitRatio should not be more than 1'
+                        FROM 
+                        (
+                            SELECT I_Processes.ItemId,
+                                I_Processes.LocationId,
+                                I_Processes.ProcessId,
+                                dpx.PeriodStart,
+                                max(ifnull(opp.MinSplitRatio, I_Processes.MinSplitRatio)) as MaxMinSplitRatio,
+                                min(ifnull(opp.MinSplitRatio, I_Processes.MinSplitRatio)) as MinMinSplitRatio
+                            from I_Processes,
+                                O_Period dpx
+                            LEFT JOIN I_ProcessesPerPeriod opp
+                            ON I_Processes.ItemId = opp.ItemId
+                            AND I_Processes.LocationId = opp.LocationId
+                            AND I_Processes.ProcessId = opp.ProcessId
+                            and I_Processes.PRocessStep= opp.ProcessStep
+                            and dpx.PEriodStart = opp.StartDate
+                            LEFT JOIN TEMP.OP_SPLIT_ERRORS tosp
+                            ON I_Processes.ItemId = tosp.ItemId
+                            AND I_Processes.LocationId = tosp.LocationId
+                            WHERE  ifnull(opp.MinSplitRatio, I_Processes.MinSplitRatio) IS NOT NULL
+                            AND    tosp.ItemId is null
+                            GROUP BY  I_Processes.ItemId,
+                                    I_Processes.LocationId,
+                                    I_Processes.ProcessId,
+                                    dpx.PeriodStart
+                        )
+                        GROUP BY ItemId, LocationId, PEriodStart
+                        HAVING round(sum(MaxMinSplitRatio),5) > 1
+                        OR round(sum(MinMinSplitRatio),5) > 1"""
+        conn.execute(insert_query + multi_period_query)
+
+    tp_split_query = """select  'I_TransportationPolicy',
+                                    '(ItemId, ToLocationId)',
+                                    '('||ItemId||','||ToLocationId||')' , 
+                                    'LTSP Error',
+                                    'Sum of MinSplitRatio should be less than 1'
+                            from I_TransportationPolicy
+                            WHERE MinSplitRatio IS NOT NULL
+                            GROUP BY ItemId, ToLocationId
+                            HAVING    ROUND(Sum(MinSplitRatio),9) > 1"""
+    conn.execute(insert_query + tp_split_query)
+
+    create_temp_table = """CREATE TABLE TEMP.TP_SPLIT_ERRORS AS
+                            SELECT ItemID, ToLocationId
+                            From I_TransportationPolicy
+                            WHERE MinSplitRatio IS NOT NULL
+                            GROUP BY ItemId, ToLocationId
+                            HAVING    ROUND(Sum(MinSplitRatio),9) > 1"""
+
+    conn.execute(create_temp_table)
+
+    row_check = """select 1 from I_TransportationPolicyPerPeriod
+                    where MinSplitRatio is not null"""
+    rows = conn.execute(row_check).fetchone()
+    if rows:
+        tp_split_query = """select  'I_TransportationPolicyPerPeriod',
+                            '(ItemId, ToLocationId, PeriodStart)',
+                            '('||dt.ItemId||','||dt.ToLocationId||','||date(dp.PeriodStart + julianday('1899-12-30'))||')' , 
+                            'Error',
+                            CASE WHEN ROUND(SUM(ifnull(dtp.MinSplitRatio, 0)),3) <= 1 THEN
+                                'Split factors information incomplete in I_TransportationPolicyPerPeriod vs. I_TransportationPolicy'
+                                ELSE 'Sum of MinSplitRatio should be less than 1' END
+                    FROM I_TransportationPolicy dt,
+                        O_Period dp
+                    LEFT JOIN I_TransportationPolicyPerPeriod dtp
+                    ON dt.ItemId = dtp.ItemId
+                    AND dt.FromLocationId = dtp.FromLocationId
+                    AND dt.ToLocationId = dtp.ToLocationId
+                    AND dt.ModeId = dtp.ModeId
+                    AND dp.PeriodStart = dtp.StartDate
+                    LEFT JOIN TEMP.TP_SPLIT_ERRORS ttsp
+                    ON dt.ItemId = ttsp.ItemId
+                    AND dt.ToLocationId = ttsp.ToLocationId
+                    WHERE ifnull(dtp.MinSplitRatio, dt.MinSplitRatio) is not null
+                    and   ttsp.ToLocationId is null
+                    GROUP BY dt.ItemId, dt.ToLocationId, dp.PeriodStart
+                    HAVING    ROUND(SUM(ifnull(dtp.MinSplitRatio, dt.MinSplitRatio)),9) > 1"""
+        conn.execute(insert_query + tp_split_query)
+
+    zero_production = """SELECT 'I_TransportationPolicyPerPeriod', 
+                        '(ItemId, FromLocationId, ToLocationId, PeriodStart)',
+                        '('||t1.ItemId||','||t1.LocationId||','||t1.ToLocationId||','||date(t1.PeriodStart + julianday('1899-12-30'))||')' , 
+                        'Warning',
+                        '0 MaxProduction but non zero MinSplitRatio from this location'
+                    FROM
+                    (
+                    SELECT DISTINCT dt.ItemId,
+                        dt.FromLocationId LocationId,
+                        dt.ToLocationId,
+                        dp.PeriodStart,
+                        ifnull(ifnull(dtp.MinSplitRatio, dt.MinSplitRatio),0) as split_ratio
+                    FROM I_TransportationPolicy dt,
+                        O_Period dp
+                    LEFT JOIN I_TransportationPolicyPerPeriod dtp
+                    ON dt.ItemId = dtp.ItemId
+                    AND dt.FromLocationId = dtp.FromLocationId
+                    AND dt.ToLocationId = dtp.ToLocationId
+                    AND dt.ModeId = dtp.ModeId
+                    AND dp.PeriodStart = dtp.StartDate
+                    WHERE ifnull(ifnull(dtp.MinSplitRatio, dt.MinSplitRatio),0) > 0
+                    ) t1,
+                    (
+                    SELECT DISTINCT di.ItemId,
+                        di.LocationId,
+                        dp.PeriodStart
+                    FROM I_InventoryPolicy di,
+                        O_Period dp
+                    LEFT JOIN I_InventoryPolicyPerPeriod dip
+                    ON di.ItemId = dip.ItemId
+                    AND di.LocationId = dip.LocationId
+                    AND dp.PeriodStart = dip.StartDate
+                    WHERE ifnull(ifnull(dip.MaxProductionQuantity, di.MaxProductionQuantity),'100')  = '0'
+                    ) t2
+                    WHERE t1.ItemId = t2.ItemId
+                    and   t1.LocationId = t2.LocationId
+                    and   t1.PeriodStart = t2.PEriodStart"""
+    conn.execute(insert_query + zero_production)
+
+    insert_log(conn, f"{'-'* 5} Split ratios validated {'-'* 5}")
