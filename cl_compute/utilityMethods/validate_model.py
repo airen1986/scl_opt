@@ -165,6 +165,22 @@ def check_min_max_values(conn):
                         where ifnull({max_column}, 0) != 'INF'
                         AND   CAST(ifnull({max_column},999999999) as Real) < ifnull({min_column},0)"""
         conn.execute(insert_query + query)
+
+    for table_name, min_column, max_column in min_max_dates:
+        table_columns = list()
+        table_columns.append(max_column)
+        table_columns.append(min_column)
+
+        query = f"""    select  DISTINCT
+                                '{table_name}', 
+                                '{','.join(table_columns)}', 
+                                 [{"]||', '||[".join(table_columns)}], 
+                                'Error', 
+                                'Max Value should be greater than Min Value'
+                        from {table_name}
+                        where 1 = 1
+                        AND   ifnull({max_column},'9999-12-31') < ifnull({min_column}, '1900-01-01')"""
+        conn.execute(insert_query + query)
     insert_log(conn, "Min Max check completed")
 
 

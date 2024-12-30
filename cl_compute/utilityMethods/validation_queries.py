@@ -59,9 +59,10 @@ min_max_constraints = [ ('I_InventoryPolicy',  'MinEndingInventory',   'MaxEndin
                         ('I_TransportationPolicy', 'MinQuantity', 'MaxQuantity'),
                         ('I_TransportationPolicy', 'MinSplitRatio', 'MaxSplitRatio'),
                         ('I_TransportationPolicyPerPeriod', 'MinQuantity', 'MaxQuantity'),
-                        ('I_TransportationPolicyPerPeriod', 'MinSplitRatio', 'MaxSplitRatio'),
-                        ('I_ForecastRegistration','StartDate', 'EndDate'),
-                        ('I_OpeningStocks', 'EntryDate', 'ExpiryDate')]
+                        ('I_TransportationPolicyPerPeriod', 'MinSplitRatio', 'MaxSplitRatio')]
+
+min_max_dates = [('I_ForecastRegistration','StartDate', 'EndDate'),
+                        ('I_OpeningStocks', 'EntryDate', 'ExpiryDate')]                        
 
 positive_vals =         {    
                             'I_BOMRecipe': ['UsageQuantity'],
