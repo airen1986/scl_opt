@@ -354,7 +354,8 @@ CREATE TABLE O_DemandAnalysis (
     ItemId                 VARCHAR,
     LocationId             VARCHAR,
     FulFilledQuantity      NUMERIC,
-    Quantity               NUMERIC
+    Quantity               NUMERIC,
+    Iteration              INTEGER
 );
 
 CREATE TABLE O_Period (

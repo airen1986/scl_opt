@@ -36,7 +36,7 @@ bom_select_query = """SELECT t2.FromItemId, t2.ToItemId, t2.LocationId,
                                 and   da.FulFilledQuantity = 0
                                 GROUP BY t2.FromItemId, t2.ToItemId, t2.LocationId """
 
-def propogate_demand(conn):
+def main(conn):
     '''This method only works if there is only one sourcing option for each inventory'''
     ''' This method will first add demand based on D_ForecastOrderItem table and then add upstream 
     dependent demand based on propogate_distribution and propogate_BOM methods
@@ -50,13 +50,13 @@ def propogate_demand(conn):
 
     conn.execute("DELETE FROM O_DemandAnalysis")
     populate_periods(conn)
-    query = """INSERT INTO O_DemandAnalysis (ItemId, LocationId, FulFilledQuantity, Quantity)
-                select df.ItemId, df.LocationId, 0,  Sum(df.Quantity)
-                from D_ForecastOrderItem df,
+    query = """INSERT INTO O_DemandAnalysis (ItemId, LocationId, FulFilledQuantity, Quantity, Iteration)
+                select df.ItemId, df.LocationId, 0,  Sum(df.Quantity), 1
+                from I_ForecastOrders df,
                      O_Period dp,
                      I_InventoryPolicy di,
-                     D_ModelSetting dm
-                WHERE df.ForecastDate = dp.PeriodStart
+                     I_ModelSetup dm
+                WHERE df.ForecastArrivalDate = dp.PeriodStart
                 AND   df.ItemId = di.ItemId
                 AND   df.LocationId = di.LocationId
                 Group BY df.ItemId, df.LocationId"""
@@ -78,6 +78,7 @@ def propogate_demand(conn):
 def propogate_distribution(conn):
     '''This method adds item location demand in O_DemandAnalysis table based on upstream transportation policies'''
     ct = 1
+    iteration_count = conn.execute("SELECT max(Iteration) from O_DemandAnalysis").fetchone()[0]
     while ct > 0:
         conn.execute("DROP TABLE IF EXISTS temp.temp_v;")
         create_temp_table = """CREATE TABLE temp.temp_v
@@ -126,44 +127,45 @@ def propogate_distribution(conn):
                                             I_TransportationPolicy.FromLocationId,
                                             I_TransportationPolicy.toLocationId """
         conn.execute(create_temp_table)
-    
+        iteration_count += 1
         add_query = """UPDATE O_DemandAnalysis
                     set FulFilledQuantity = 1
                     FROM temp.temp_v t1
                     WHERE O_DemandAnalysis.ItemId = t1.ItemId
                     and   O_DemandAnalysis.LocationId = t1.toLocationId
                     and   O_DemandAnalysis.FulFilledQuantity = 0;
-                    INSERT INTO O_DemandAnalysis (ScenarioName, ItemId, LocationId, FulFilledQuantity,  Quantity)
-                    SELECT ScenarioName, ItemId, FromLocationId, 0, SUM(SplitFactor * Quantity)
+                    INSERT INTO O_DemandAnalysis (ItemId, LocationId, FulFilledQuantity,  Quantity, Iteration)
+                    SELECT ItemId, FromLocationId, 0, SUM(SplitFactor * Quantity), ?
                     FROM temp.temp_v
-                    GROUP BY ItemId, FromLocationId, ScenarioName;"""
+                    GROUP BY ItemId, FromLocationId;"""
 
-        conn.execute(add_query)
+        conn.execute(add_query, (iteration_count,))
         ct = conn.execute("select changes()").fetchone()[0]
 
 
 def propogate_BOM(conn):
     ct = 1
     '''This method adds item location demand in O_DemandAnalysis table based on upstream bill of materials'''
+    iteration_count = conn.execute("SELECT max(Iteration) from O_DemandAnalysis").fetchone()[0]
     while ct > 0:
         conn.execute("DROP TABLE IF EXISTS temp.temp_v;")
         create_temp_table = f"""CREATE TABLE temp.temp_v
                                 as
                                 {bom_select_query}"""
         conn.execute(create_temp_table)
-    
+        iteration_count += 1
         add_query = """UPDATE O_DemandAnalysis
                     set FulFilledQuantity = 1
                     FROM temp.temp_v t1
                     WHERE O_DemandAnalysis.ItemId = t1.ToItemId
                     and   O_DemandAnalysis.LocationId = t1.LocationId
                     and   O_DemandAnalysis.FulFilledQuantity = 0;
-                    INSERT INTO O_DemandAnalysis (ScenarioName, ItemId, LocationId, FulFilledQuantity,  Quantity)
-                    SELECT ScenarioName, FromItemId, LocationId, 0,  SUM(Quantity)
+                    INSERT INTO O_DemandAnalysis (ItemId, LocationId, FulFilledQuantity,  Quantity, Iteration)
+                    SELECT FromItemId, LocationId, 0,  SUM(Quantity), ?
                     FROM temp.temp_v
-                    GROUP BY FromItemId, LocationId, ScenarioName;"""
+                    GROUP BY FromItemId, LocationId;"""
 
-        conn.execute(add_query)
+        conn.execute(add_query, (iteration_count,))
         ct = conn.execute("select changes()").fetchone()[0]
 
 
@@ -174,17 +176,19 @@ def aggregate_demand_analysis(conn):
     
     query = """CREATE TABLE temp.temp_v
                 AS
-                select ItemId, LocationId, ScenarioName,  sum(quantity) as Quantity, max(FulFilledQuantity) as FulFilledQuantity
+                select ItemId, LocationId,  sum(quantity) as Quantity, 
+                max(FulFilledQuantity) as FulFilledQuantity, Max(Iteration) as Iteration
                 from O_DemandAnalysis
-                group by ItemId, LocationId, ScenarioName
+                group by ItemId, LocationId
                 HAVING sum(quantity) > 0"""
     
     conn.execute(query)
 
     conn.execute("DELETE FROM O_DemandAnalysis;")
 
-    query = """Insert into O_DemandAnalysis(ScenarioName, ItemId, LocationId, Quantity, FulFilledQuantity)
-                select ScenarioName, ItemId, LocationId, Quantity, FulFilledQuantity
+    query = """Insert into O_DemandAnalysis(ItemId, LocationId, Quantity, 
+                FulFilledQuantity, Iteration)
+                select ItemId, LocationId, Quantity, FulFilledQuantity, Iteration
                 FROM  temp.temp_v"""
     conn.execute(query)
 
