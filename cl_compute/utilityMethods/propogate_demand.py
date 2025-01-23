@@ -43,7 +43,7 @@ def main(conn):
     It will also maintain a fulfilled column in O_DemandAnalysis table to keep track of which 
     demands are already satisfied'''
 
-    insert_log(conn, f"{'*'* 10} Demand Propagation Started {'*'* 10}")
+    insert_log(conn, f"{'-'* 5} Demand Propagation Started {'-'* 5}")
     ct = check_for_loops(conn)
     if ct > 0:
         insert_log(conn, "Demand Propogation: Check for loops in validation")
@@ -54,8 +54,7 @@ def main(conn):
                 select df.ItemId, df.LocationId, 0,  Sum(df.Quantity), 1
                 from I_ForecastOrders df,
                      O_Period dp,
-                     I_InventoryPolicy di,
-                     I_ModelSetup dm
+                     I_InventoryPolicy di
                 WHERE df.ForecastArrivalDate = dp.PeriodStart
                 AND   df.ItemId = di.ItemId
                 AND   df.LocationId = di.LocationId
@@ -71,7 +70,7 @@ def main(conn):
         else:
             ct = 0
     aggregate_demand_analysis(conn)
-    insert_log(conn, f"{'*'* 10} Demand Propagation Completed {'*'* 10}")
+    insert_log(conn, f"{'-'* 5} Demand Propagation Completed {'-'* 5}")
 
 
 

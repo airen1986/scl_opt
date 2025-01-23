@@ -59,7 +59,7 @@ bom_select_query = """select distinct dob.ItemId, dob.LocationId
                         AND   ac2.ItemId is null"""
 
 def main(conn):
-    insert_log(conn, f"{'*'* 10} Model Clean Started {'*'* 10}")
+    insert_log(conn, f"{'-'* 5} Model Clean Started {'-'* 5}")
     delete_null_primary_keys(conn)
     create_combinations(conn)
     delete_inactives(conn)
@@ -67,7 +67,7 @@ def main(conn):
     conn.execute(update_registration_dates)
     round_decimals(conn)
     update_defaults(conn)
-    insert_log(conn, f"{'*'* 10} Model Clean Completed {'*'* 10}")
+    insert_log(conn, f"{'-'* 5} Model Clean Completed {'-'* 5}")
 
 def create_combinations(conn):
     '''This method creates all item location combinations (which have any dependency on demand)

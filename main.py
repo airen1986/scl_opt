@@ -9,6 +9,7 @@ if sys.platform != 'emscripten':
     thisDB = r"C:\Users\akhil\Downloads\SCL.sqlite3"
 
 with sql_connect(thisDB) as conn:
+    conn.execute("DELETE FROM T_SolverLog")
     clean_model(conn)
     validate_model(conn)
     propogate_demand(conn)
