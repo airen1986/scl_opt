@@ -350,6 +350,13 @@ CREATE TABLE O_Objective (
     LastUpdateDate         VARCHAR DEFAULT (datetime('now', 'localtime') )
 );
 
+CREATE TABLE O_DemandAnalysis (
+    ItemId                 VARCHAR,
+    LocationId             VARCHAR,
+    FulFilledQuantity      NUMERIC,
+    Quantity               NUMERIC
+);
+
 CREATE TABLE O_Period (
     PeriodIdx              INTEGER,
     PeriodStart            VARCHAR,

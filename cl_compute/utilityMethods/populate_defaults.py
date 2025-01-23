@@ -44,7 +44,6 @@ default_data = {'I_InventoryPolicy': {
                                 }
                             }
 
-
 def update_defaults(conn):
     ''' populate default values based on default_data object 
         1. It populates UnicostModel in I_InventoryPolicy table if there are nulls and 
