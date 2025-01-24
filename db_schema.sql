@@ -132,7 +132,8 @@ CREATE TABLE I_ModelSetup (
     StartDate        VARCHAR,
     TimeFrequency    VARCHAR,
     NumberOfPeriods  NUMERIC,
-    InterestRate     NUMERIC DEFAULT (0.12)
+    InterestRate     NUMERIC DEFAULT (0.12),
+    DOSWindowStartPeriod INTEGER DEFAULT (1) 
 );
 
 -- Table: I_BOMRecipe
@@ -326,6 +327,12 @@ CREATE TABLE O_Inventory (
     RequiredInventory       NUMERIC
 );
 
+CREATE TABLE O_InitialInventory (
+    ItemId                  VARCHAR,
+    LocationId              VARCHAR,
+    Quantity                NUMERIC
+);
+
 CREATE TABLE O_Production (
     ItemId                 VARCHAR,
     LocationId             VARCHAR,
@@ -336,10 +343,10 @@ CREATE TABLE O_Production (
 );
 
 CREATE TABLE O_ForecastRegistration (
-    ItemCode               VARCHAR,
-    LocationCode           VARCHAR,
-    PeriodStart            VARCHAR,
-    DemandItemCode         VARCHAR,
+    ItemId                 VARCHAR,
+    LocationId             VARCHAR,
+    StartDate              VARCHAR,
+    ForecastItemId         VARCHAR,
     SatisfiedQuantity      NUMERIC
 );
 
