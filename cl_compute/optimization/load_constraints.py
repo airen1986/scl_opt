@@ -59,7 +59,7 @@ def add_min_relase_time_constraint(conn, prob, periods, inventory_dict, flow_dic
                 f'min_release_constraint_{item}_{location}_{prd_name}'
 
         if prd_idx == 0:
-            for partial_release_time in range(release_time):
+            for partial_release_time in range(1, release_time+1):
                 release_periods = periods[prd_idx: prd_idx+partial_release_time]
                 out_flow = lpSum(flow_dict[item][location][to_location][mode][period]
                                 for to_location in flow_dict.get(item, {}).get(location, {})

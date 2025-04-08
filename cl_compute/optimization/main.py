@@ -16,6 +16,7 @@ def main(conn, initialize_inv = False):
         insert_log(conn, f"No periods for optimization")
         return
     prob = LpProblem(f"The_Supply_Planning_Problem", LpMinimize)
+    conn.execute("DELETE FROM O_Objective")
     initial_inv, initial_inv_objective = get_initial_inventory(conn, initialize_inv, periods[0])
     demand_dict = generate_demand_var(conn)
     inventory_dict,  inv_objective, product_values, holding_cost = generate_inventory_var(conn)

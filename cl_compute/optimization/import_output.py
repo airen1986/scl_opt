@@ -166,7 +166,7 @@ def import_initial_inv(conn, initial_inv, initial_period):
 
 def delete_output_tables(conn):
     output_tables = ("O_Inventory", "O_Transportation", "O_InitialInventory", 
-                     "O_Objective", "O_Production", "O_ForecastRegistration")
+                     "O_Production", "O_ForecastRegistration")
     for table_name in output_tables:
         delete_query = f"DELETE FROM [{table_name}]"
         conn.execute(delete_query)

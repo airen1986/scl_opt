@@ -21,21 +21,21 @@ reg_sql = """insert into O_ForecastRegistration (ItemId, LocationId, StartDate,
                         Values (?, ?, ?, ?, ?)"""
 
 update_period_end = """UPDATE O_Transportation
-                        set EndDate = date(StartDate, '+'||t1.TransportationLeadTime||' days')
+                        set EndDate = date(StartDate, TransportationLeadTime)
                         FROM 
                         (
-                        select df.rowid as rid,
-                            ROUND(CASE WHEN dm.TimeFrequency = 'Daily'
-                                                THEN CAST(ifnull(dt.TransportationLeadTime,0) AS FLOAT)
-                                                WHEN dm.TimeFrequency = 'Weekly'
-                                                THEN round(CAST(ifnull(dt.TransportationLeadTime,0) AS FLOAT)/7,0) * 7
-                                                WHEN dm.TimeFrequency = 'Monthly'
-                                                THEN round(CAST(ifnull(dt.TransportationLeadTime,0) AS FLOAT)/30,0) * 30
-                                                WHEN dm.TimeFrequency = 'Quarterly'
-                                                THEN round(CAST(ifnull(dt.TransportationLeadTime,0) AS FLOAT)/90,0) * 90
-                                                WHEN dm.TimeFrequency = 'Yearly'
-                                                THEN round(CAST(ifnull(dt.TransportationLeadTime,0) AS FLOAT)/360,0) * 360
-                            END, 0) as TransportationLeadTime
+                       select df.rowid as rid,
+                            CASE WHEN dm.TimeFrequency = 'Daily'
+                                    THEN  '+'||(round(CAST(ifnull(dt.TransportationLeadTime,0) AS FLOAT), 0))|| ' days'
+                                    WHEN dm.TimeFrequency = 'Weekly'
+                                    THEN '+'||(round(CAST(ifnull(dt.TransportationLeadTime,0) AS FLOAT)/7,0) * 7)|| ' days'
+                                    WHEN dm.TimeFrequency = 'Monthly'
+                                    THEN '+'||(round(CAST(ifnull(dt.TransportationLeadTime,0) AS FLOAT)/30,0) * 1)|| ' months'
+                                    WHEN dm.TimeFrequency = 'Quarterly'
+                                    THEN '+'||(round(CAST(ifnull(dt.TransportationLeadTime,0) AS FLOAT)/90,0) * 3)|| ' months'
+                                    WHEN dm.TimeFrequency = 'Yearly'
+                                    THEN '+'||(round(CAST(ifnull(dt.TransportationLeadTime,0) AS FLOAT)/360,0) * 12)|| ' months'
+                            END as TransportationLeadTime
                         from O_Transportation df,
                             I_TransportationPolicy dt,
                             I_ModelSetup dm
