@@ -446,10 +446,6 @@ INSERT INTO S_TableGroup (GroupName, TableName, TableDisplayName, TableType, Col
 INSERT INTO S_TableGroup (GroupName, TableName, TableDisplayName, TableType, ColumnOrder, Table_Status, Freeze_Col_Num) VALUES ('Setups', 'S_TableParameters', 'Table Parameters', 'Input', NULL, 'Active', NULL);
 INSERT INTO S_TableGroup (GroupName, TableName, TableDisplayName, TableType, ColumnOrder, Table_Status, Freeze_Col_Num) VALUES ('Setups', 'S_TaskMaster', 'Task Master', 'Input', NULL, 'Active', NULL);
 INSERT INTO S_TableGroup (GroupName, TableName, TableDisplayName, TableType, ColumnOrder, Table_Status, Freeze_Col_Num) VALUES ('Setups', 'S_ExecutionFiles', 'Code Files', 'Input', NULL, 'Active', NULL);
-INSERT INTO S_TableGroup (GroupName, TableName, TableDisplayName, TableType, ColumnOrder, Table_Status, Freeze_Col_Num) VALUES ('All Other', 'V_TEMPV', 'Temp View', 'Output', NULL, 'Active', NULL);
-INSERT INTO S_TableGroup (GroupName, TableName, TableDisplayName, TableType, ColumnOrder, Table_Status, Freeze_Col_Num) VALUES('All Other','S_DataFiles','Data Files','Input','["FileId","FileName","FileType","Status"]','Active',NULL);
-INSERT INTO S_TableGroup (GroupName, TableName, TableDisplayName, TableType, ColumnOrder, Table_Status, Freeze_Col_Num) VALUES('All Other','S_PackageWheels','PackageWheels','Input','["WheelId","WheelName","Status"]','Active',NULL);
-
 
 INSERT INTO S_TaskMaster (TaskId, TaskName, TaskDisplayName, TaskType) VALUES (1, 'validate_model.py', 'Validate Model', 'PythonScript');
 INSERT INTO S_TaskMaster (TaskId, TaskName, TaskDisplayName, TaskType) VALUES (2, 'clean_model.py', 'Clean Model', 'PythonScript');
