@@ -64,8 +64,9 @@ def validate_periods(conn):
     elif len(all_rows) == 0:
         query_tpl = ('I_ModelSetup', None, None, "Error", f"No data in I_ModelSetup table")
 
+    value_query = "Values (?, ?, ?, ?, ?)"
     if query_tpl:
-        conn.execute(insert_query, query_tpl)
+        conn.execute(insert_query + value_query, query_tpl)
         return
 
     start_date, time_bucket, period_count = all_rows[0]

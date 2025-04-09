@@ -78,6 +78,8 @@ def propogate_distribution(conn):
     '''This method adds item location demand in O_DemandAnalysis table based on upstream transportation policies'''
     ct = 1
     iteration_count = conn.execute("SELECT max(Iteration) from O_DemandAnalysis").fetchone()[0]
+    if iteration_count is None:
+        iteration_count = 0
     while ct > 0:
         conn.execute("DROP TABLE IF EXISTS temp.temp_v;")
         create_temp_table = """CREATE TABLE temp.temp_v
@@ -146,6 +148,8 @@ def propogate_BOM(conn):
     ct = 1
     '''This method adds item location demand in O_DemandAnalysis table based on upstream bill of materials'''
     iteration_count = conn.execute("SELECT max(Iteration) from O_DemandAnalysis").fetchone()[0]
+    if iteration_count is None:
+        iteration_count = 0
     while ct > 0:
         conn.execute("DROP TABLE IF EXISTS temp.temp_v;")
         create_temp_table = f"""CREATE TABLE temp.temp_v
